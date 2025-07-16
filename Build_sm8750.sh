@@ -14,17 +14,17 @@ error() {
   exit 1
 }
 
-# 参数设置
-ENABLE_KPM=true
-ENABLE_LZ4KD=true
-
 # 机型选择
 info "请选择要编译的机型："
 info "1. 一加 Ace 5 Pro"
 info "2. 一加 13"
 info "3.一加 13T"
 info "4.一加 Pad 2 Pro"
-read -p "输入选择 [1-4]: " device_choice
+info "5.一加 Ace5 至尊版"
+info "6.真我 GT 7 Pro"
+info "7.真我 GT 7 Pro 竞速版"
+
+read -p "输入选择 [1-7]: " device_choice
 
 case $device_choice in
     1)
@@ -51,24 +51,65 @@ case $device_choice in
         KERNEL_TIME="Wed Dec 11 19:16:38 UTC 2024"
         KERNEL_SUFFIX="-android15-8-g0261dbe3cf7e-ab12786384-4k"   
         ;;
+    5)
+        DEVICE_NAME="oneplus_ace5_ultra"
+        REPO_MANIFEST="oneplus_ace5_ultra.xml"
+        KERNEL_TIME="Fri Apr 18 19:35:07 UTC 2025"
+        KERNEL_SUFFIX="-android15-8-gfc70d29746a7-abogki412262948-4k"
+        ;;  
+    6)
+        DEVICE_NAME="realme_GT7pro"
+        REPO_MANIFEST="realme_GT7pro.xml"
+        KERNEL_TIME="Tue Dec 17 23:36:49 UTC 2024"
+        KERNEL_SUFFIX="-android15-8-g013ec21bba94-abogki383916444-4k"
+        ;;
+    7)
+        DEVICE_NAME="realme_GT7pro_Speed"
+        REPO_MANIFEST="realme_GT7pro_Speed.xml"
+        KERNEL_TIME="Tue Dec 17 23:36:49 UTC 2024"
+        KERNEL_SUFFIX="-android15-8-g013ec21bba94-abogki383916444-4k"
+        ;;
     *)
         error "无效的选择，请输入1-3之间的数字"
         ;;
 esac
 
 # 自定义补丁
+# 函数：用于判断输入，确保无效输入返回默认值
+prompt_boolean() {
+    local prompt="$1"
+    local default_value="$2"
+    local result
+    read -p "$prompt" result
+    case "$result" in
+        [nN]) echo false ;;
+        [yY]) echo true ;;
+        "") echo "$default_value" ;;
+        *) echo "$default_value" ;;
+    esac
+}
 
-read -p "输入内核名称修改(可改中文和emoji 回车默认): " input_suffix
+# 自定义补丁设置
+
+read -p "输入内核名称修改(可改中文和emoji，回车默认): " input_suffix
 [ -n "$input_suffix" ] && KERNEL_SUFFIX="$input_suffix"
 
-read -p "输入内核构建日期更改(回车默认为原厂) : " input_time
+read -p "输入内核构建日期更改(回车默认为原厂): " input_time
 [ -n "$input_time" ] && KERNEL_TIME="$input_time"
 
-read -p "是否启用kpm?(回车默认开启) [y/N]: " kpm
-[[ "$kpm" =~ [nN] ]] && ENABLE_KPM=false
+ENABLE_KPM=$(prompt_boolean "是否启用KPM？(回车默认开启) [y/N]: " true)
+ENABLE_LZ4KD=$(prompt_boolean "是否启用LZ4KD？(回车默认开启) [y/N]: " true)
+ENABLE_BBR=$(prompt_boolean "是否启用BBR？(回车默认关闭) [y/N]: " false)
 
-read -p "是否启用lz4+zstd?(回车默认开启) [y/N]: " lz4
-[[ "$lz4" =~ [nN] ]] && ENABLE_LZ4KD=false
+# 选择的机型信息输出
+info "选择的机型: $DEVICE_NAME"
+info "内核构建文件: $REPO_MANIFEST"
+info "内核名称: $KERNEL_SUFFIX"
+info "内核时间: $KERNEL_TIME"
+info "是否开启KPM: $ENABLE_KPM"
+info "是否开启LZ4KD: $ENABLE_LZ4KD"
+info "是否开启BBR: $ENABLE_BBR"
+
 
 # 环境变量 - 按机型区分ccache目录
 export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
@@ -101,7 +142,7 @@ cd "$WORKSPACE" || error "无法进入工作目录"
 
 # 检查并安装依赖
 info "检查并安装依赖..."
-DEPS=(make python3 git curl ccache flex bison libssl-dev libelf-dev bc zip)
+DEPS=(make clang lld python3 git curl ccache flex bison libssl-dev libelf-dev bc zip)
 MISSING_DEPS=()
 
 for pkg in "${DEPS[@]}"; do
@@ -153,7 +194,7 @@ cd "$KERNEL_WORKSPACE" || error "无法进入kernel_workspace目录"
 
 # 初始化源码
 info "初始化repo并同步源码..."
-repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/sm8750 -m "$REPO_MANIFEST" --depth=1 || error "repo初始化失败"
+repo init -u https://github.com/showdo/kernel_manifest.git -b refs/heads/oneplus/sm8750 -m "$REPO_MANIFEST" --depth=1 || error "repo初始化失败"
 repo --trace sync -c -j$(nproc --all) --no-tags || error "repo同步失败"
 
 # ==================== 核心构建步骤 ====================
@@ -169,34 +210,32 @@ cd kernel_platform || error "进入kernel_platform失败"
 curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/susfs-main/kernel/setup.sh" | bash -s susfs-main
 cd KernelSU || error "进入KernelSU目录失败"
 KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 10700)
-export KSU_VERSION=$KSU_VERSION
-sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile || error "修改KernelSU版本失败"
-info "$KSU_VERSION"
 
 # 设置susfs
 info "设置susfs..."
 cd "$KERNEL_WORKSPACE" || error "返回工作目录失败"
-git clone -q https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6 || info "susfs4ksu已存在或克隆失败"
-git clone -q https://github.com/SukiSU-Ultra/SukiSU_patch.git || info "SukiSU_patch已存在或克隆失败"
-cd kernel_platform || error "进入kernel_platform失败"
+git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6 || info "susfs4ksu已存在或克隆失败"
+git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git || info "SukiSU_patch已存在或克隆失败"
+cd kernel_platform        
 cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/
 cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
 cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
-cd $KERNEL_WORKSPACE/kernel_platform/common || { echo "进入common目录失败"; exit 1; }
-
-
-# 判断当前编译机型是否为一加13t
-if [ "$DEVICE_NAME" = "oneplus_13t" ]; then
-    info "当前编译机型为一加13T, 跳过patch补丁应用"
+cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
+cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
+cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
+cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
+# Apply patches
+cd ./common
+# 判断当前编译机型是否为oneplus_13t或oneplus_ace5_ultra
+if [ "$DEVICE_NAME" = "oneplus_13t" ] || [ "$DEVICE_NAME" = "oneplus_ace5_ultra" ]; then
+    info "当前编译机型为 $DEVICE_NAME, 跳过patch补丁应用"
 else
-    info "DEVICE_NAME is $DEVICE_NAME, 正在应用patch补丁..."
-    
     # 应用补丁
-
     sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-android15-6.6.patch
     sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-android15-6.6.patch
 fi
+
 
 patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || info "SUSFS补丁应用可能有警告"
 cp "$KERNEL_WORKSPACE/SukiSU_patch/hooks/syscall_hooks.patch" ./ || error "复制syscall_hooks.patch失败"
@@ -233,22 +272,16 @@ apply_hmbird_patch() {
 
 # 主流程
 apply_hmbird_patch
-if [ "$ENABLE_LZ4KD" = "true"]; then
-  cd kernel_workspace/kernel_platform/common
-  info "更新LZ4实现"
-  curl -sSLO https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/lib/lz4/lz4_decompress.c
-  curl -sSLO https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/lib/lz4/lz4defs.h
-  curl -sSLO https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/lib/lz4/lz4_compress.c
-  curl -sSLO https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/lib/lz4/lz4hc_compress.c
-  
-  info "更新Zstd实现"
-  mkdir -p lib/zstd && cd lib/zstd
-  curl -sSL https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/lib/zstd/zstd_common_module.c -o common.c
-  cd ../../..
-  info "✅ LZ4/Zstd 算法更新完成"
+
+if [ "$ENABLE_LZ4KD" = "true" ]; then
+    info "启用 LZ4KD 压缩..."
+    cd $KERNEL_WORKSPACE/kernel_platform/common
+    cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
+    patch -p1 -F 3 < lz4kd.patch || true
+else
+    echo "未启用LZ4KD压缩算法，跳过。"
 fi
-# 返回common目录
-cd .. || error "返回common目录失败"
+
 cd arch/arm64/configs || error "进入configs目录失败"
 # 添加SUSFS配置
 info "添加SUSFS配置..."
@@ -269,18 +302,24 @@ CONFIG_KSU_SUSFS_ENABLE_LOG=y
 CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
 CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
 CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-# 启用高级压缩支持
 CONFIG_CRYPTO_LZ4HC=y
-CONFIG_CRYPTO_LZ4=y
-CONFIG_CRYPTO_ZSTD=y
-# 文件系统级压缩支持
-CONFIG_F2FS_FS_COMPRESSION=y
-CONFIG_F2FS_FS_LZ4=y
-CONFIG_F2FS_FS_LZ4HC=y
-CONFIG_F2FS_FS_ZSTD=y
-# 内核镜像压缩配置
-CONFIG_KERNEL_LZ4=y
-# BBR(TCP拥塞控制算法)
+CONFIG_CRYPTO_LZ4K=y
+CONFIG_CRYPTO_LZ4KD=y
+CONFIG_CRYPTO_842=y
+CONFIG_LOCALVERSION_AUTO=n" >> gki_defconfig
+
+
+# 添加KPM配置
+if [ "$ENABLE_KPM" = "true" ]; then
+    info "添加KPM配置..."
+    echo "CONFIG_KPM=y" >> gki_defconfig
+else
+    info "KPM 已禁用，跳过相关操作。"
+fi
+# 添加BBR配置
+if [ "$ENABLE_BBR" = "true" ]; then
+    info "添加BBR配置..."
+    echo -e"# BBR(TCP拥塞控制算法)
 CONFIG_TCP_CONG_ADVANCED=y
 CONFIG_TCP_CONG_BBR=y
 CONFIG_NET_SCH_FQ=y
@@ -288,22 +327,17 @@ CONFIG_TCP_CONG_BIC=n
 CONFIG_TCP_CONG_CUBIC=n
 CONFIG_TCP_CONG_WESTWOOD=n
 CONFIG_TCP_CONG_HTCP=n
-CONFIG_DEFAULT_TCP_CONG=bbr
-
-CONFIG_LOCALVERSION_AUTO=n" >> gki_defconfig
-
+CONFIG_DEFAULT_TCP_CONG=bbr" >> common/arch/arm64/configs/gki_defconfig
+    sudo sed -i 's/check_defconfig//' common/build.config.gki || error "修改build.config.gki失败"
+else
+    echo "BBR 已禁用，跳过相关操作。"
+fi
 # 返回kernel_platform目录
 cd $KERNEL_WORKSPACE/kernel_platform || error "返回kernel_platform目录失败"
 
 # 移除check_defconfig
 sudo sed -i 's/check_defconfig//' $KERNEL_WORKSPACE/kernel_platform/common/build.config.gki || error "修改build.config.gki失败"
 
-# 添加KPM配置
-if [ "$ENABLE_KPM" = true ]; then
-    info "添加KPM配置..."
-    echo "CONFIG_KPM=y" >> common/arch/arm64/configs/gki_defconfig
-    sudo sed -i 's/check_defconfig//' common/build.config.gki || error "修改build.config.gki失败"
-fi
 
 # 修改内核名称
 info "修改内核名称..."
@@ -336,8 +370,6 @@ make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=clan
   RUSTC=../../prebuilts/rust/linux-x86/1.73.0b/bin/rustc \
   PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole \
   LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 Image || error "内核构建失败"
-
-
 
 info "应用Linux补丁..."
 cd out/arch/arm64/boot || error "进入boot目录失败"
