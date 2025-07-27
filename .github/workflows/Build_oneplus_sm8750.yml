@@ -38,11 +38,11 @@ on:
         default: true
         type: boolean
         
-      enable_feature_y:
-        description: "启用lz4优化"
-        required: false
-        default: false
-        type: boolean
+      #enable_feature_y:
+       # description: "启用lz4优化"
+        #required: false
+      #  default: false
+      #  type: boolean
   
       enable_feature_z:
         description: "添加风驰驱动"
@@ -218,21 +218,19 @@ jobs:
         run: |
            cd kernel_workspace
            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6
-           git clone https://github.com/xueba0458/kernel_patches.git
+           #git clone https://github.com/xueba0458/kernel_patches.git
            git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git
 
            cd kernel_platform        
            cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/
            cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
+           cp ../kernel_patches/next/syscall_hooks.patch ./common/
            cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
-           #cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
-           #cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
-           #cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
-           #cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
-
-           cp ../kernel_patches/zram/001-lz4.patch ./common/
-           cp ../kernel_patches/zram/lz4armv8.S ./common/lib
+           cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
+           cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
+           cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
+           cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
           
            # Apply patches
            cd ./common
@@ -245,8 +243,6 @@ jobs:
            patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
            patch -p1 -F 3 < syscall_hooks.patch
-           echo "📦 应用lz4优化..."
-           git apply -p1 < 001-lz4.patch || true
            echo "完成"
 
       - name: 🔧 Cache HMBird patch (缓存HMBird补丁)
