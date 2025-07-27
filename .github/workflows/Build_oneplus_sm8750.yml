@@ -38,17 +38,20 @@ on:
         default: true
         type: boolean
         
-      # enable_feature_c:
-      #   description: "启用lz4kd+zstd"
-      #   required: false
-      #   default: true
-      #   type: boolean
+      enable_feature_c:
+       description: "启用lz4kd+zstd"
+       required: true
+       type: choice
+       options:
+          - 'On'
+          - 'Off'
+       default: 'On'
 
-      enable_feature_y:
-        description: "启用lz4kd"
-        required: false
-        default: false
-        type: boolean
+      # enable_feature_y:
+      #   description: "启用lz4kd"
+      #   required: false
+      #   default: false
+      #   type: boolean
   
       enable_feature_z:
         description: "添加风驰驱动"
@@ -232,11 +235,16 @@ jobs:
            cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
            cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
-           cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
-           cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
-           cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
-           cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
-
+           # cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
+           # cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
+           # cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
+           # cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
+           if [ "${{ github.event.inputs.enable_feature_c }}" == "On" ]; then
+            cp ../kernel_patches/zram/001-lz4.patch ./common/
+            cp ../kernel_patches/zram/lz4armv8.S ./common/lib
+            # cp ../kernel_patches/zram/lz4-oneplus.patch ./common/
+            cp ../kernel_patches/zram/002-zstd.patch ./common/
+           fi
            # Apply patches
            cd ./common
 
@@ -248,7 +256,11 @@ jobs:
            patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
            patch -p1 -F 3 < syscall_hooks.patch
-
+           if [ "${{ github.event.inputs.enable_feature_c }}" == "On" ]; then
+            echo "📦 应用lz4+zstd补丁..."
+            git apply -p1 < 001-lz4.patch || true
+            patch -p1 < 002-zstd.patch || true
+           fi
            
            echo "完成"
 
@@ -278,24 +290,13 @@ jobs:
           echo "HMBird补丁应用完成"
 
           
-      - name: 🔧 Apply lz4kd Patches (应用LZ4KD补丁)
-        if: ${{inputs.enable_feature_y }}
-        run: |
-          cd kernel_workspace/kernel_platform/common
-            cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
-            patch -p1 -F 3 < lz4kd.patch || true
-  
-      # - name: 🔧 Update compression algorithms (更新压缩算法)
-      #   if: ${{ inputs.enable_feature_c }}
+      # - name: 🔧 Apply lz4kd Patches (应用LZ4KD补丁)
+      #   if: ${{inputs.enable_feature_y }}
       #   run: |
       #     cd kernel_workspace/kernel_platform/common
-      #     cp ../../kernel_patches/zram/001-lz4.patch ./
-      #     cp ../../kernel_patches/zram/lz4armv8.S ./lib
-      #     cp ../../kernel_patches/zram/002-zstd.patch ./
-      #     git apply -p1 < 001-lz4.patch || true
-      #     patch -p1 < 002-zstd.patch || true
-      #     echo "✅ LZ4/Zstd 算法更新完成"
-
+      #       cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
+      #       patch -p1 -F 3 < lz4kd.patch || true
+  
       - name: 🔧 Set gki_defconfig (设置编译配置)
         env:
           ENABLE_B: ${{ github.event.inputs.enable_feature_b }}       
