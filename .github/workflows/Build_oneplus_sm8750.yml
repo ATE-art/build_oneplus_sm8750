@@ -38,12 +38,18 @@ on:
         default: true
         type: boolean
         
+      enable_feature_c:
+        description: "启用lz4kd+zstd"
+        required: false
+        default: true
+        type: boolean
+
       enable_feature_y:
         description: "启用lz4kd"
         required: false
         default: true
         type: boolean
-        
+  
       enable_feature_z:
         description: "添加风驰驱动"
         required: false
@@ -218,6 +224,7 @@ jobs:
         run: |
            cd kernel_workspace
            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6
+           git clone https://github.com/xueba0458/kernel_patches.git
            git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git
 
            cd kernel_platform        
@@ -277,7 +284,20 @@ jobs:
           cd kernel_workspace/kernel_platform/common
             cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
             patch -p1 -F 3 < lz4kd.patch || true
-            
+  
+      - name: 🔧 Update compression algorithms (更新压缩算法)
+        if: ${{ inputs.enable_feature_c }}
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          cp ../../kernel_patches/zram/001-lz4.patch ./common/
+          cp ../../kernel_patches/zram/lz4armv8.S ./common/lib
+          cp ../../kernel_patches/zram/002-zstd.patch ./common/
+          git apply -p1 < 001-lz4.patch || true
+          patch -p1 < 002-zstd.patch || true
+          
+          cd ../../..
+          echo "✅ LZ4/Zstd 算法更新完成"
+
       - name: 🔧 Set gki_defconfig (设置编译配置)
         env:
           ENABLE_B: ${{ github.event.inputs.enable_feature_b }}       
