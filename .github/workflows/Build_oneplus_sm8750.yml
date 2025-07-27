@@ -39,7 +39,7 @@ on:
         type: boolean
         
       enable_feature_y:
-        description: "启用lz4kd"
+        description: "启用lz4优化"
         required: false
         default: false
         type: boolean
@@ -218,6 +218,7 @@ jobs:
         run: |
            cd kernel_workspace
            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6
+           git clone https://github.com/xueba0458/kernel_patches.git
            git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git
 
            cd kernel_platform        
@@ -225,10 +226,14 @@ jobs:
            cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
            cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
-           cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
-           cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
-           cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
-           cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
+           #cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
+           #cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
+           #cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
+           #cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
+
+           cp ../kernel_patches/zram/001-lz4.patch ./common/
+           cp ../kernel_patches/zram/lz4armv8.S ./common/lib
+          
            # Apply patches
            cd ./common
 
@@ -240,6 +245,8 @@ jobs:
            patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
            patch -p1 -F 3 < syscall_hooks.patch
+           echo "📦 应用lz4优化..."
+           git apply -p1 < 001-lz4.patch || true
            echo "完成"
 
       - name: 🔧 Cache HMBird patch (缓存HMBird补丁)
@@ -268,12 +275,12 @@ jobs:
           echo "HMBird补丁应用完成"
 
           
-      - name: 🔧 Apply lz4kd Patches (应用LZ4KD补丁)
-        if: ${{inputs.enable_feature_y }}
-        run: |
-          cd kernel_workspace/kernel_platform/common
-            cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
-            patch -p1 -F 3 < lz4kd.patch || true
+#      - name: 🔧 Apply lz4kd Patches (应用LZ4kd补丁)
+#        if: ${{inputs.enable_feature_y }}
+#        run: |
+#          cd kernel_workspace/kernel_platform/common
+#            cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
+#            patch -p1 -F 3 < lz4kd.patch || true
   
       - name: 🔧 Set gki_defconfig (设置编译配置)
         env:
