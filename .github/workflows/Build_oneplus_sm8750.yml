@@ -47,7 +47,7 @@ on:
       enable_feature_y:
         description: "启用lz4kd"
         required: false
-        default: true
+        default: false
         type: boolean
   
       enable_feature_z:
